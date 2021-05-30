@@ -35,9 +35,9 @@ def adjust_learning_rate(optimizer, epoch):
 @torch.no_grad()
 def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_label_dir: str):
     def truths_length(truths):
-        for i in range(50):
-            if truths[i][1] == 0:
-                return i
+        for idx in range(50):
+            if truths[idx][1] == 0:
+                return idx
 
     nms_thresh = 0.4
     iou_thresh = 0.5
@@ -63,11 +63,11 @@ def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_lab
     logging('validation at epoch %d' % epoch)
     model.eval()
 
-    for batch_idx, (frame_idx, n_frames, data, target, imgpath) in enumerate(test_loader):
+    for batch_idx, (frame_idx, n_frames, data, target) in enumerate(test_loader):
         n_digits = len(str(n_frames))
 
         if batch_idx % 10 == 0:
-            print("Test Batch_idx-{}/{} or {}".format(batch_idx, nbatch, imgpath))
+            print("Test Batch_idx-{}/{}".format(batch_idx, nbatch))
 
         data = data.cuda()
 
@@ -79,7 +79,7 @@ def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_lab
                 boxes = all_boxes[i]
                 boxes = nms(boxes, nms_thresh)
 
-                detection_path = os.path.join(det_label_dir, str(frame_idx).zfill(n_digits))
+                detection_path = os.path.join(det_label_dir, str(frame_idx + 1).zfill(n_digits))
                 detection_dir_path = Path(detection_path).parent
 
                 mkdir(detection_dir_path)
@@ -108,17 +108,19 @@ def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_lab
                 num_gts = truths_length(truths)
 
                 total = total + num_gts
+                pred_list = []
 
-                for i in range(len(boxes)):
-                    if boxes[i][4] > 0.25:
+                for bbox in range(len(boxes)):
+                    if boxes[bbox][4] > 0.25:
                         proposals = proposals + 1
+                        pred_list.append(bbox)
 
-                for i in range(num_gts):
-                    box_gt = [truths[i][1], truths[i][2], truths[i][3], truths[i][4], 1.0, 1.0, truths[i][0]]
+                for gt_idx in range(num_gts):
+                    box_gt = [truths[gt_idx][1], truths[gt_idx][2], truths[gt_idx][3], truths[i][4], 1.0, 1.0, truths[gt_idx][0]]
                     best_iou = 0
                     best_j = -1
 
-                    for j in range(len(boxes)):
+                    for j in pred_list:
                         iou = bbox_iou(box_gt, boxes[j], x1y1x2y2=False)  # iou > 0,5 = TP, iou < 0.5 = FP
                         if iou > best_iou:
                             best_j = j

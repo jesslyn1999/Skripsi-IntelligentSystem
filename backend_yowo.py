@@ -15,6 +15,8 @@ from torchvision import transforms
 from core.utils import logging, file_lines
 from torch.utils.data import DataLoader
 from core.optimization import test
+from backend_yolo import process_frame_yolo
+from system.finalization import process_label_video
 
 
 _LOC = _path.realpath(_path.join(os.getcwd(), _path.dirname(__file__)))
@@ -197,7 +199,7 @@ def filter_optim_state_dict(ori_optim, pre_optim):
     return output
 
 
-def process_frame(video_path: str, cfg_path: str, det_label_dir: str, gt_label_dir: str = None):
+def process_frame_yowo(video_path: str, cfg_path: str, det_label_dir: str, gt_label_dir: str = None):
     """
     frames of the clip must be in RGB and the len match the num of train_frame of the model
     """
@@ -232,7 +234,7 @@ def process_frame(video_path: str, cfg_path: str, det_label_dir: str, gt_label_d
     model_frame = YOWO(sys_opt)
 
     model_frame = model_frame.cuda()
-    model = nn.DataParallel(model_frame, device_ids=['cuda:0'])  #TODO: change for multi gpus
+    model = nn.DataParallel(model_frame, device_ids=["cuda:0"])  #TODO: change for multi gpus
 
     pytorch_total_params = sum(param.numel() for param in model.parameters() if param.requires_grad)
     logging('Total number of trainable parameters: {}'.format(pytorch_total_params))
@@ -268,7 +270,7 @@ def process_frame(video_path: str, cfg_path: str, det_label_dir: str, gt_label_d
         print("===================================================================")
 
     system_dataset = SystemDataset(
-        video_path, shape=(244, 244),
+        video_path, gt_label_dir, shape=(244, 244),
         frame_transform=transforms.Compose([transforms.ToTensor()]),
         clip_dur=16
     )
@@ -277,8 +279,20 @@ def process_frame(video_path: str, cfg_path: str, det_label_dir: str, gt_label_d
 
     if opt_evaluate:
         logging('evaluating ...')
-        test(sys_cfg_opt, 0, model, test_loader, "TODO")
+        test(sys_cfg_opt, 0, model, test_loader, det_label_dir)
+
     else:
-        for epoch in range(sys_opt.begin_epoch, sys_opt.begin_epoch + 1):
-            test(sys_cfg_opt, epoch, model, test_loader, "TODO")
+        epoch = sys_opt.begin_epoch
+        yolo_label_folder = os.path.join(det_label_dir, "detection_yolo")
+        yowo_label_folder = os.path.join(det_label_dir, "detection_yowo")
+        final_label_folder = os.path.join(det_label_dir, "detection_final")
+
+        test(sys_cfg_opt, epoch, model, test_loader, yowo_label_folder)
+        process_frame_yolo(test_loader, yolo_label_folder)
+        process_label_video(video_path, final_label_folder, yolo_label_folder, yowo_label_folder)
+
+
+
+
+
 

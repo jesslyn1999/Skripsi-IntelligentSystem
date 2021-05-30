@@ -101,8 +101,8 @@ class SystemDataset(Dataset):
 
         label_path = ""
         if self.label_folder:
-            label_path = [path for path in _Path(self.label_folder).rglob("*{}.txt".format(index + 1))
-                          if int(str(path)) == index + 1]
+            label_path = str([path for path in _Path(self.label_folder).rglob("*{}.txt".format(index + 1))
+                              if int(str(path)) == index + 1][0])
 
         key_frame_idx, clip, label = load_system_data(self.video_path, index,
                                                       self.clip_dur, self.sampling_rate, label_path)
