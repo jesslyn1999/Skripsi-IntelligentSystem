@@ -3,6 +3,8 @@ import numpy as np
 import os
 from core.utils import bbox_iou, logging, get_region_boxes, nms, mkdir
 from pathlib import Path
+from typing import List
+from torch.utils.data import DataLoader
 
 
 def adjust_learning_rate(optimizer, epoch):
@@ -31,7 +33,7 @@ def adjust_learning_rate(optimizer, epoch):
 
 
 @torch.no_grad()
-def test(epoch, model, test_loader, region_loss):
+def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_label_dir: str):
     def truths_length(truths):
         for i in range(50):
             if truths[i][1] == 0:
@@ -41,12 +43,11 @@ def test(epoch, model, test_loader, region_loss):
     iou_thresh = 0.5
     eps = 1e-5
 
-    #     num_classes = cfg.MODEL.NUM_CLASSES
-    #     anchors     = [float(i) for i in cfg.SOLVER.ANCHORS]
-    #     num_anchors = cfg.SOLVER.NUM_ANCHORS
-    num_classes = region_loss.num_classes
-    anchors = region_loss.anchors
-    num_anchors = region_loss.num_anchors
+    net_opt, region_opt = sys_cgf_opt
+
+    opt_num_classes = int(region_opt["num_classes"])
+    opt_anchors = [float(itr.strip()) for itr in region_opt["anchors"].split(",")]
+    opt_num_anchors = int(region_opt["num_anchors"])
 
     conf_thresh_valid = 0.005
     total = 0.0
@@ -59,28 +60,26 @@ def test(epoch, model, test_loader, region_loss):
 
     nbatch = len(test_loader)
 
-    logging('validation at epoch %d' % (epoch))
+    logging('validation at epoch %d' % epoch)
     model.eval()
 
-    batch_len = len(test_loader)
-    batch_len_d = len(test_loader.dataset)
-
-    for batch_idx, (frame_idx, data, target, imgpath) in enumerate(test_loader):
+    for batch_idx, (frame_idx, n_frames, data, target, imgpath) in enumerate(test_loader):
+        n_digits = len(str(n_frames))
 
         if batch_idx % 10 == 0:
-            print("Test Batch_idx-{}/{} or {}".format(batch_idx, batch_len, batch_len_d, imgpath))
+            print("Test Batch_idx-{}/{} or {}".format(batch_idx, nbatch, imgpath))
 
         data = data.cuda()
 
         with torch.no_grad():
             output = model(data).data
-            all_boxes = get_region_boxes(output, conf_thresh_valid, num_classes, anchors, num_anchors, 0, 1)
+            all_boxes = get_region_boxes(output, conf_thresh_valid, opt_num_classes, opt_anchors, opt_num_anchors, 0, 1)
 
             for i in range(output.size(0)):
                 boxes = all_boxes[i]
                 boxes = nms(boxes, nms_thresh)
 
-                detection_path = os.path.join('jhmdb_detections', 'detections_' + str(epoch), frame_idx[i])
+                detection_path = os.path.join(det_label_dir, str(frame_idx).zfill(n_digits))
                 detection_dir_path = Path(detection_path).parent
 
                 mkdir(detection_dir_path)
@@ -97,13 +96,13 @@ def test(epoch, model, test_loader, region_loss):
                             cls_conf = float(box[5 + 2 * j].item())
                             prob = det_conf * cls_conf
 
-                            #                             f_detect.write(str(x1) + ' ' + str(y1) + ' ' + str(x2) + ' ' + str(y2) + " " +
-                            #                                            " ".join([str(num).replace("tensor(", "").replace(")", "") for num in box[4:]]) + '\n')
+                            f_detect.write(str(x1) + ' ' + str(y1) + ' ' + str(x2) + ' ' + str(y2) + " " +
+                                           " ".join([str(num).replace("tensor(", "").replace(")", "") for num in box[4:]]) + '\n')
 
                             # TODO: comment if specific
-                            f_detect.write(
-                                str(int(box[6]) + 1) + ' ' + str(prob) + ' ' + str(x1) + ' ' + str(y1) + ' ' + str(
-                                    x2) + ' ' + str(y2) + '\n')
+                            # f_detect.write(
+                            #     str(int(box[6]) + 1) + ' ' + str(prob) + ' ' + str(x1) + ' ' + str(y1) + ' ' + str(
+                            #         x2) + ' ' + str(y2) + '\n')
 
                 truths = target[i].view(-1, 5)
                 num_gts = truths_length(truths)
@@ -142,6 +141,7 @@ def test(epoch, model, test_loader, region_loss):
     locolization_recall = 1.0 * total_detected / (total + eps)
 
     print("Classification accuracy: %.3f" % classification_accuracy)
-    print("Localization recall: %.3f" % locolization_recall)
+    print("Locolization recall: %.3f" % locolization_recall)
 
     return fscore
+

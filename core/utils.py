@@ -10,6 +10,7 @@ from torch.autograd import Variable
 from pathlib import Path
 import struct  # get_image_size
 import imghdr  # get_image_size
+import cv2 as _cv
 
 
 class AverageMeter(object):
@@ -523,7 +524,7 @@ def get_region_boxes_video(output, conf_thresh, num_classes, anchors, num_anchor
 
 def plot_boxes_cv2(img, boxes, savename=None, class_names=None, color=None):
     import cv2
-    colors = torch.FloatTensor([[1, 0, 1], [0, 0, 1], [0, 1, 1], [0, 1, 0], [1, 1, 0], [1, 0, 0]]);
+    colors = torch.FloatTensor([[1, 0, 1], [0, 0, 1], [0, 1, 1], [0, 1, 0], [1, 1, 0], [1, 0, 0]])
 
     def get_color(c, x, max_val):
         ratio = float(x) / max_val * 5
@@ -567,7 +568,7 @@ def plot_boxes_cv2(img, boxes, savename=None, class_names=None, color=None):
 
 # For showing results
 def plot_boxes(img, boxes, savename=None, class_names=None):
-    colors = torch.FloatTensor([[1, 0, 1], [0, 0, 1], [0, 1, 1], [0, 1, 0], [1, 1, 0], [1, 0, 0]]);
+    colors = torch.FloatTensor([[1, 0, 1], [0, 0, 1], [0, 1, 1], [0, 1, 0], [1, 1, 0], [1, 0, 0]])
 
     def get_color(c, x, max_val):
         ratio = float(x) / max_val * 5
@@ -718,7 +719,7 @@ def do_detect(model, img, conf_thresh, nms_thresh, use_cuda=1):
     return boxes
 
 
-def read_data_cfg(datacfg):
+def read_data_cfg(datacfg) -> dict:
     options = dict()
     options['gpus'] = '0,1,2,3'
     options['num_workers'] = '10'
@@ -727,7 +728,7 @@ def read_data_cfg(datacfg):
 
     for line in lines:
         line = line.strip()
-        if line == '':
+        if line == '' or line.startswith(';') or line.startswith('#'):
             continue
         key, value = line.split('=')
         key = key.strip()
@@ -807,3 +808,17 @@ def load_value_file(file_path):
 
 def mkdir(output_folder: str):
     Path(output_folder).mkdir(parents=True, exist_ok=True)
+
+
+def count_frames(video_path: str):
+    try:
+        cap = _cv.VideoCapture(video_path)
+        n_frames = int(cap.get(_cv.CAP_PROP_FRAME_COUNT))
+        cap.release()
+    except _cv.error as error:
+        raise Exception('count_frames error: {}'.format(error))
+    return n_frames
+
+
+def str_2_bool(text: str) -> bool:
+    return text.strip().lower == "true"

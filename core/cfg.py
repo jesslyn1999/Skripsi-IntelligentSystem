@@ -1,8 +1,9 @@
 import torch
 from core.utils import convert2cpu
+from typing import List
 
 
-def parse_cfg(cfgfile):
+def parse_cfg(cfgfile: str) -> List[dict]:
     blocks = []
     fp = open(cfgfile, 'r')
     block = None

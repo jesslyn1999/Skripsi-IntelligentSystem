@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from backbone.yowo import YOWO
-from core.utils import read_data_cfg
+from core.utils import read_data_cfg, str_2_bool
 from core.cfg import parse_cfg
 import os
 from backbone.yowo import get_fine_tuning_parameters
@@ -10,20 +10,18 @@ from core.regionloss import RegionLoss
 import time
 import pathlib
 import os.path as _path
-from dataset.list_dataset import listDataset
-from torchvision import datasets, transforms
+from dataset.list_dataset import ListDataset, SystemDataset
+from torchvision import transforms
 from core.utils import logging, file_lines
+from torch.utils.data import DataLoader
 from core.optimization import test
-from typing import List
-import cv2 as _cv2
-from PIL import Image
 
 
 _LOC = _path.realpath(_path.join(os.getcwd(), _path.dirname(__file__)))
 
 
 def backend_yowo():
-    opt = read_data_cfg(_path.join(_LOC, "../config/backend_yowo_config.cfg"))
+    opt = read_data_cfg(_path.join(_LOC, "../config/sys_config.cfg"))
 
     dataset_use = opt.dataset
     # assert dataset_use == 'ucf101-24' or dataset_use == 'jhmdb-21', 'invalid dataset'
@@ -64,7 +62,7 @@ def backend_yowo():
     region_loss.anchors = [float(i) for i in anchors]
     # region_loss.num_classes    = int(loss_options['classes'])  # TODO: need to changed
     region_loss.num_classes = opt.n_classes
-    region_loss.num_anchors = int(loss_options['num'])
+    region_loss.num_anchors = int(loss_options['num_anchors'])
     region_loss.anchor_step = len(region_loss.anchors) // region_loss.num_anchors
     region_loss.object_scale = float(loss_options['object_scale'])
     region_loss.noobject_scale = float(loss_options['noobject_scale'])
@@ -130,14 +128,16 @@ def backend_yowo():
         print("Loaded model fscore: ", checkpoint['fscore'])
         print("===================================================================")
 
-    test_dataset = listDataset(
+    test_dataset = ListDataset(
         basepath, testlist, dataset_use=dataset_use,
         transform=transforms.Compose([transforms.ToTensor()]),
         train=False, clip_duration=16
     )
 
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
-                                              num_workers=8, drop_last=False, pin_memory=True)
+    test_loader = DataLoader(
+        test_dataset, batch_size=batch_size, shuffle=False,
+        num_workers=8, drop_last=False, pin_memory=True
+    )
 
     if opt.evaluate:
         logging('evaluating ...')
@@ -197,77 +197,88 @@ def filter_optim_state_dict(ori_optim, pre_optim):
     return output
 
 
-def process_frame(frames: List[Image.Image], labels: torch.Tensor = None):
+def process_frame(video_path: str, cfg_path: str, det_label_dir: str, gt_label_dir: str = None):
     """
     frames of the clip must be in RGB and the len match the num of train_frame of the model
     """
-    Image.open(path_tmp).convert('RGB')
-    data = frames.cuda()
+    sys_opt: dict = read_data_cfg(cfg_path)
 
-    jahfk
-    with torch.no_grad():
-        output = model(data).data
-        all_boxes = get_region_boxes(output, conf_thresh_valid, num_classes, anchors, num_anchors, 0, 1)
+    opt_cfg_data = sys_opt["cfg_data"]
+    opt_cfg_file = sys_opt["cfg_file"]
+    opt_resume_path = sys_opt["resume_path"]
+    opt_original = str_2_bool(sys_opt["original"])
+    opt_evaluate = str_2_bool(sys_opt["evaluate"])
 
-        for i in range(output.size(0)):
-            boxes = all_boxes[i]
-            boxes = nms(boxes, nms_thresh)
+    sys_data_opt = read_data_cfg(opt_cfg_data)
+    sys_cfg_opt = parse_cfg(opt_cfg_file)
 
-            detection_path = os.path.join('jhmdb_detections', 'detections_' + str(epoch), frame_idx[i])
-            detection_dir_path = Path(detection_path).parent
+    net_opt, region_opt = sys_cfg_opt
 
-            mkdir(detection_dir_path)
+    opt_batch_size = int(net_opt["batch_size"])
+    opt_momentum = float(net_opt["momentum"])
+    opt_decay = float(net_opt["decay"])
+    opt_learning_rate = float(net_opt["learning_rate"])
 
-            with open(detection_path, 'w+') as f_detect:
-                for box in boxes:
-                    x1 = round(float(box[0] - box[2] / 2.0) * 320.0)
-                    y1 = round(float(box[1] - box[3] / 2.0) * 240.0)
-                    x2 = round(float(box[0] + box[2] / 2.0) * 320.0)
-                    y2 = round(float(box[1] + box[3] / 2.0) * 240.0)
+    opt_gpus: str = sys_data_opt["gpus"] # e.g. 0,1,2,3
+    opt_num_workers = int(sys_data_opt["num_workers"])
 
-                    det_conf = float(box[4])
-                    for j in range((len(box) - 5) // 2):
-                        cls_conf = float(box[5 + 2 * j].item())
-                        prob = det_conf * cls_conf
+    use_cuda = torch.cuda.is_available()
+    seed = int(time.time())
+    torch.manual_seed(seed)
+    if use_cuda:
+        os.environ['CUDA_VISIBLE_DEVICES'] = opt_gpus
+        torch.cuda.manual_seed(seed)
 
-                        #                             f_detect.write(str(x1) + ' ' + str(y1) + ' ' + str(x2) + ' ' + str(y2) + " " +
-                        #                                            " ".join([str(num).replace("tensor(", "").replace(")", "") for num in box[4:]]) + '\n')
+    model_frame = YOWO(sys_opt)
 
-                        # TODO: comment if specific
-                        f_detect.write(
-                            str(int(box[6]) + 1) + ' ' + str(prob) + ' ' + str(x1) + ' ' + str(y1) + ' ' + str(
-                                x2) + ' ' + str(y2) + '\n')
+    model_frame = model_frame.cuda()
+    model = nn.DataParallel(model_frame, device_ids=['cuda:0'])  #TODO: change for multi gpus
 
-            truths = target[i].view(-1, 5)
-            num_gts = truths_length(truths)
+    pytorch_total_params = sum(param.numel() for param in model.parameters() if param.requires_grad)
+    logging('Total number of trainable parameters: {}'.format(pytorch_total_params))
 
-            total = total + num_gts
+    parameters = get_fine_tuning_parameters(model, sys_opt)
+    optimizer = optim.SGD(parameters, lr=opt_learning_rate / opt_batch_size, momentum=opt_momentum, dampening=0,
+                          weight_decay=opt_decay * opt_batch_size)
 
-            for i in range(len(boxes)):
-                if boxes[i][4] > 0.25:
-                    proposals = proposals + 1
+    # Load resume path if necessary
+    if opt_resume_path:
+        print("===================================================================")
+        print('loading checkpoint {}'.format(opt_resume_path))
+        checkpoint = torch.load(opt_resume_path)
+        sys_opt.begin_epoch = checkpoint['epoch'] + 1
 
-            for i in range(num_gts):
-                box_gt = [truths[i][1], truths[i][2], truths[i][3], truths[i][4], 1.0, 1.0, truths[i][0]]
-                best_iou = 0
-                best_j = -1
+        if opt_original:
+            model_dict = model.state_dict()
+            pretrained_dict = filter_state_dict(model_dict, checkpoint['state_dict'])
+            model_dict.update(pretrained_dict)
+            model.load_state_dict(model_dict)
+        else:
+            model.load_state_dict(checkpoint['state_dict'])
 
-                for j in range(len(boxes)):
-                    iou = bbox_iou(box_gt, boxes[j], x1y1x2y2=False)  # iou > 0,5 = TP, iou < 0.5 = FP
-                    if iou > best_iou:
-                        best_j = j
-                        best_iou = iou
+        if opt_original:
+            optimizer_dict = optimizer.state_dict()
+            pretrained_dict = filter_optim_state_dict(optimizer_dict, checkpoint['optimizer'])
+            optimizer_dict.update(pretrained_dict)
+            optimizer.load_state_dict(optimizer_dict)
+        else:
+            optimizer.load_state_dict(checkpoint['optimizer'])
 
-                if best_iou > iou_thresh:
-                    total_detected += 1
-                    if int(boxes[best_j][6]) == box_gt[6]:
-                        correct_classification += 1
+        print("Loaded model fscore: ", checkpoint['fscore'])
+        print("===================================================================")
 
-                if best_iou > iou_thresh and int(boxes[best_j][6]) == box_gt[6]:
-                    correct = correct + 1
+    system_dataset = SystemDataset(
+        video_path, shape=(244, 244),
+        frame_transform=transforms.Compose([transforms.ToTensor()]),
+        clip_dur=16
+    )
 
-        precision = 1.0 * correct / (proposals + eps)
-        recall = 1.0 * correct / (total + eps)
-        fscore = 2.0 * precision * recall / (precision + recall + eps)
-        logging("[%d/%d] precision: %f, recall: %f, fscore: %f" % (batch_idx, nbatch, precision, recall, fscore))
-    pass
+    test_loader = DataLoader(system_dataset, num_workers=opt_num_workers, pin_memory=True)
+
+    if opt_evaluate:
+        logging('evaluating ...')
+        test(sys_cfg_opt, 0, model, test_loader, "TODO")
+    else:
+        for epoch in range(sys_opt.begin_epoch, sys_opt.begin_epoch + 1):
+            test(sys_cfg_opt, epoch, model, test_loader, "TODO")
+

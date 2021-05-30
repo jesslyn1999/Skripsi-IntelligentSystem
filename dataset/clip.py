@@ -5,7 +5,9 @@ import time
 import torch
 import numpy as np
 from torch.autograd import Variable
-from core.utils import convert2cpu, convert2cpu_long, read_truths_args
+from core.utils import convert2cpu, convert2cpu_long, read_truths_args, count_frames
+from typing import Tuple, Union, Any
+import cv2 as _cv
 
 
 def distort_image(im, hue, sat, val):
@@ -154,6 +156,54 @@ def load_data_detection(base_path, imgpath, train, train_dur, sampling_rate, sha
         return clip, label
     else:
         return os.path.join(im_split[0], im_split[1], im_split[2]), clip, label
+
+
+def load_system_data(
+        video_path: str, key_frame_idx: int, train_dur: int,
+        sampling_rate: int, label_path: str = None
+) -> Tuple[int, list, Union[torch.Tensor, Any]]:
+    """
+    only for testing or system usage, not for training
+    key_frame_idx: range 0...len frames of video(exclusive)
+    """
+    clip = []
+    len_video = count_frames(video_path)
+
+    cap = _cv.VideoCapture(video_path)
+
+    for idx in reversed(range(train_dur)):
+        tmp_idx = key_frame_idx - idx * sampling_rate
+        while tmp_idx < 0:
+            tmp_idx = len_video + tmp_idx
+        while tmp_idx >= len_video:
+            tmp_idx = tmp_idx - len_video
+
+        cap.set(_cv.CAP_PROP_POS_FRAMES, tmp_idx)
+
+        res, frame = cap.read()
+        frame = _cv.cvtColor(frame, _cv.COLOR_BGR2RGB)
+        clip.append(frame)
+
+    cap.release()
+
+    """
+    Process Label
+    """
+    label = torch.zeros(50 * 5)
+    try:
+        tmp = torch.from_numpy(read_truths_args(label_path, 8.0 / clip[0].width).astype('float32'))
+    except Exception:
+        tmp = torch.zeros(1, 5)
+
+    tmp = tmp.view(-1)
+    tsz = tmp.numel()
+
+    if tsz > 50 * 5:
+        label = tmp[0:50 * 5]
+    elif tsz > 0:
+        label[0:tsz] = tmp
+
+    return key_frame_idx, clip, label
 
 
 # this function works for obtaining new labels after data augumentation

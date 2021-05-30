@@ -1,10 +1,17 @@
 import random
-from dataset.clip import load_data_detection
+from torch.utils.data.dataset import T_co
+from torchvision.transforms import Compose
+
+from dataset.clip import load_data_detection, load_system_data
 import torch
 from torch.utils.data import Dataset
 
+from core.utils import count_frames
 
-class listDataset(Dataset):
+from pathlib import Path as _Path
+
+
+class ListDataset(Dataset):
 
     # clip duration = 8, i.e, for each time 8 frames are considered together
     def __init__(self, base, root, dataset_use='ucf101-24', shape=(224, 224),
@@ -37,6 +44,7 @@ class listDataset(Dataset):
         assert index <= len(self), 'index range error'
 
         imgpath = self.lines[index].rstrip()
+        frame_idx = -1
 
         if self.train:  # For Training
             jitter = 0.2
@@ -62,6 +70,50 @@ class listDataset(Dataset):
             label = self.target_transform(label)
 
         if self.train:
-            return (clip, label, imgpath)
+            return clip, label, imgpath
         else:
-            return (frame_idx, clip, label, imgpath)
+            return frame_idx, clip, label, imgpath
+
+
+class SystemDataset(Dataset):
+    def __init__(self, video_path: str = None, label_folder: str = None,
+                 shape: tuple = (224, 224), frame_transform: Compose = None, label_transform=None,
+                 clip_dur: int = 16, sampling_rate=1) -> None:
+        self.video_path = video_path
+        self.label_folder = label_folder
+        self.shape = shape
+        self.frame_transform = frame_transform
+        self.label_transform = label_transform
+        self.clip_dur = clip_dur
+        self.sampling_rate = sampling_rate
+        self._num_samples = count_frames(video_path)
+        super().__init__()
+
+    def __len__(self):
+        return self._num_samples
+
+    def __getitem__(self, index) -> T_co:
+        """
+        :return:
+            index start from zero, indicate the index of the frames in video
+        """
+        assert index <= len(self), 'SystemDataset index range error'
+
+        label_path = ""
+        if self.label_folder:
+            label_path = [path for path in _Path(self.label_folder).rglob("*{}.txt".format(index + 1))
+                          if int(str(path)) == index + 1]
+
+        key_frame_idx, clip, label = load_system_data(self.video_path, index,
+                                                      self.clip_dur, self.sampling_rate, label_path)
+        clip = [img.resize(self.shape) for img in clip]
+
+        if self.frame_transform is not None:
+            clip = [self.frame_transform(img) for img in clip]
+
+        clip = torch.cat(clip, 0).view((self.clip_dur, -1) + self.shape).permute(1, 0, 2, 3)
+
+        if self.label_transform is not None:
+            label = self.label_transform(label)
+
+        return index, self._num_samples, clip, label
