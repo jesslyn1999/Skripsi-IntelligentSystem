@@ -10,6 +10,7 @@ import cv2 as _cv
 import os
 from pathlib import Path as _Path
 
+
 ALL_ACTION_LABELS = ["falling_down", "chest_pain", "pushing", "touch_pocket",
                      "hit_with_object", "wield_knife", "shoot_with_gun", "support_somebody",
                      "attacked_by_gun", "run"]
