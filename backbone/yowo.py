@@ -13,7 +13,7 @@ class YOWO(nn.Module):
 
         ##### 2D Backbone #####
         if opt.backbone_2d == "darknet":
-            self.backbone_2d = Darknet("/kaggle/input/hal-configuration/yolo.cfg")
+            self.backbone_2d = Darknet(opt.backbone_2d_cfg)
             num_ch_2d = 425  # Number of output channels for backbone_2d
         else:
             raise ValueError("Wrong backbone_2d model is requested. Please select\

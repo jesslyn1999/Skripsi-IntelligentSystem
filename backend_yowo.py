@@ -18,8 +18,14 @@ from core.optimization import test
 from backend_yolo import process_frame_yolo
 from system.finalization import process_label_video
 
-
 _LOC = _path.realpath(_path.join(os.getcwd(), _path.dirname(__file__)))
+
+
+def main():
+    video_path = "D:\\semester 8\\TA\\IntelligentSystem-Result\\shootgun-video.mp4"
+    sys_cfg_path = "D:\\semester 8\\TA\\IntelligentSystem\\config\\system\\sys_config.cfg"
+    det_label_dir = "D:\\semester 8\\TA\\IntelligentSystem-Result\\shootgun-video\\det-label"
+    process_frame_yowo(video_path, sys_cfg_path, det_label_dir)
 
 
 def backend_yowo():
@@ -150,7 +156,7 @@ def backend_yowo():
 
 
 if __name__ == '__main__':
-    backend_yowo()
+    main()
     pass
 
 
@@ -221,7 +227,7 @@ def process_frame_yowo(video_path: str, cfg_path: str, det_label_dir: str, gt_la
     opt_decay = float(net_opt["decay"])
     opt_learning_rate = float(net_opt["learning_rate"])
 
-    opt_gpus: str = sys_data_opt["gpus"] # e.g. 0,1,2,3
+    opt_gpus: str = sys_data_opt["gpus"]  # e.g. 0,1,2,3
     opt_num_workers = int(sys_data_opt["num_workers"])
 
     use_cuda = torch.cuda.is_available()
@@ -234,7 +240,7 @@ def process_frame_yowo(video_path: str, cfg_path: str, det_label_dir: str, gt_la
     model_frame = YOWO(sys_opt)
 
     model_frame = model_frame.cuda()
-    model = nn.DataParallel(model_frame, device_ids=["cuda:0"])  #TODO: change for multi gpus
+    model = nn.DataParallel(model_frame, device_ids=["cuda:0"])  # TODO: change for multi gpus
 
     pytorch_total_params = sum(param.numel() for param in model.parameters() if param.requires_grad)
     logging('Total number of trainable parameters: {}'.format(pytorch_total_params))
@@ -288,11 +294,5 @@ def process_frame_yowo(video_path: str, cfg_path: str, det_label_dir: str, gt_la
         final_label_folder = os.path.join(det_label_dir, "detection_final")
 
         test(sys_cfg_opt, epoch, model, test_loader, yowo_label_folder)
-        process_frame_yolo(test_loader, yolo_label_folder)
+        process_frame_yolo(sys_opt, test_loader, yolo_label_folder)
         process_label_video(video_path, final_label_folder, yolo_label_folder, yowo_label_folder)
-
-
-
-
-
-

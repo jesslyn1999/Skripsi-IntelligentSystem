@@ -27,11 +27,14 @@ def detect_image(model, image, transform: transforms.Compose, img_size=416, conf
     return detections
 
 
-def process_frame_yolo(dataset_loader, det_label_dir: str, img_size_cvt=416):
+def process_frame_yolo(sys_opt: dict, dataset_loader, det_label_dir: str, img_size_cvt=416):
+    opt_backbone_yolov3_weight = sys_opt["backbone_yolov3_weight"]
+    opt_backbone_yolov3_cfg = sys_opt["backbone_yolov3_cfg"]
+
     # TODO: Load the YOLO model
     model = models.load_model(
-        "<PATH_TO_YOUR_CONFIG_FOLDER>/yolov3.cfg",
-        "<PATH_TO_YOUR_WEIGHTS_FOLDER>/yolov3.weights")
+        opt_backbone_yolov3_cfg,
+        opt_backbone_yolov3_weight)
 
     transform = transforms.Compose([DEFAULT_TRANSFORMS, Resize(img_size_cvt)])
 
@@ -52,7 +55,7 @@ def process_frame_yolo(dataset_loader, det_label_dir: str, img_size_cvt=416):
         boxes = to_cpu(detections).numpy()
 
         detection_path = os.path.join(det_label_dir, str(frame_idx + 1).zfill(n_digits))
-        detection_dir_path = Path(detection_path).parent
+        detection_dir_path = str(Path(detection_path).parent)
 
         mkdir(detection_dir_path)
 
