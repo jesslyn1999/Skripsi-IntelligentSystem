@@ -6,14 +6,6 @@ from core.cfg import parse_cfg, print_cfg
 from core.cfg import load_conv, load_fc, save_conv, save_fc, save_conv_bn, load_conv_bn
 
 
-class EmptyModule(nn.Module):
-    def __init__(self):
-        super(EmptyModule, self).__init__()
-
-    def forward(self, x):
-        return x
-
-
 class Reorg(nn.Module):
     def __init__(self, stride=2):
         super(Reorg, self).__init__()
@@ -34,6 +26,14 @@ class Reorg(nn.Module):
         x = x.view(B, C, H // hs * W // ws, hs * ws).transpose(2, 3).contiguous()
         x = x.view(B, C, hs * ws, H // hs, W // ws).transpose(1, 2).contiguous()
         x = x.view(B, hs * ws * C, H // hs, W // ws)
+        return x
+
+
+class EmptyModule(nn.Module):
+    def __init__(self):
+        super(EmptyModule, self).__init__()
+
+    def forward(self, x):
         return x
 
 
@@ -67,10 +67,12 @@ class Darknet(nn.Module):
             # if ind > 0:
             #    return x
 
+            # print("block type: {} and input ={}".format(block["type"], x.shape))
+
             if block['type'] == 'net':
                 continue
-            elif block['type'] == 'convolutional' or block['type'] == 'maxpool' or block['type'] == 'reorg' or block[
-                'type'] == 'avgpool' or block['type'] == 'softmax' or block['type'] == 'connected':
+            elif block['type'] == 'convolutional' or block['type'] == 'maxpool' or block['type'] == 'reorg' or \
+                    block['type'] == 'avgpool' or block['type'] == 'softmax' or block['type'] == 'connected':
                 x = self.models[ind](x)
                 outputs[ind] = x
             elif block['type'] == 'route':
@@ -98,11 +100,13 @@ class Darknet(nn.Module):
                 outputs[ind] = x
             elif block['type'] == 'region':
                 continue
-                print("LOSSS")
             elif block['type'] == 'cost':
                 continue
             else:
                 print('unknown type %s' % (block['type']))
+
+            # print("block type: {} and output ={}".format(block["type"], x.shape))
+
         # print(x.shape)
         return x
 
@@ -148,6 +152,7 @@ class Darknet(nn.Module):
                 pool_size = int(block['size'])
                 stride = int(block['stride'])
                 if stride > 1:
+                    # print("POOL SIZE: {} and stride: {}".format(pool_size, stride))
                     model = nn.MaxPool2d(pool_size, stride)
                 else:
                     model = MaxPoolStride1()

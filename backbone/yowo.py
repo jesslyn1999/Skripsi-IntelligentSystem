@@ -44,7 +44,7 @@ class YOWO(nn.Module):
 
         ##### Attention & Final Conv #####
         self.cfam = CFAMBlock(num_ch_2d + num_ch_3d, 1024)
-        self.conv_final = nn.Conv2d(1024, 5 * (opt.n_classes + 4 + 1), kernel_size=1, bias=False)
+        self.conv_final = nn.Conv2d(1024, 5 * (int(opt.n_classes) + 4 + 1), kernel_size=1, bias=False)
 
         self.seen = 0
 
@@ -53,16 +53,28 @@ class YOWO(nn.Module):
         x_3d = input  # Input clip
         x_2d = input[:, :, -1, :, :]
 
+        # print("Init input shape 3d={} and 2d={}".format(x_3d.size(), x_2d.size()))
+
         x_2d = self.backbone_2d(x_2d)
         x_3d = self.backbone_3d(x_3d)
 
+        # print("After processing forward, shape 3d before squeeze={}".format(x_3d.size(), x_2d.size()))
+
         x_3d = torch.squeeze(x_3d, dim=2)
+
+        # print("After processing forward, shape 3d={} and 2d={}".format(x_3d.size(), x_2d.size()))
 
         x = torch.cat((x_3d, x_2d), dim=1)
 
+        # print("Combine dim=1, 3D and 2D output result={}".format(x.size()))
+
         x = self.cfam(x)
 
+        # print("CFAM output shape= {}".format(x.size()))
+
         out = self.conv_final(x)
+
+        # print("Conv_final output shape= {}".format(out.size(), out))
 
         return out
 

@@ -16,16 +16,10 @@ from core.utils import logging, file_lines
 from torch.utils.data import DataLoader
 from core.optimization import test
 from backend_yolo import process_frame_yolo
-from system.finalization import process_label_video
+from system.finalization import process_label_video, video_bbox
+from core.utils import Map as _Map
 
 _LOC = _path.realpath(_path.join(os.getcwd(), _path.dirname(__file__)))
-
-
-def main():
-    video_path = "D:\\semester 8\\TA\\IntelligentSystem-Result\\shootgun-video.mp4"
-    sys_cfg_path = "D:\\semester 8\\TA\\IntelligentSystem\\config\\system\\sys_config.cfg"
-    det_label_dir = "D:\\semester 8\\TA\\IntelligentSystem-Result\\shootgun-video\\det-label"
-    process_frame_yowo(video_path, sys_cfg_path, det_label_dir)
 
 
 def backend_yowo():
@@ -144,7 +138,7 @@ def backend_yowo():
 
     test_loader = DataLoader(
         test_dataset, batch_size=batch_size, shuffle=False,
-        num_workers=8, drop_last=False, pin_memory=True
+        num_workers=0, drop_last=False, pin_memory=True
     )
 
     if opt.evaluate:
@@ -153,18 +147,6 @@ def backend_yowo():
     else:
         for epoch in range(opt.begin_epoch, opt.begin_epoch + 1):
             fscore = test(epoch, model, test_loader, region_loss)
-
-
-if __name__ == '__main__':
-    main()
-    pass
-
-
-class Map(dict):
-    """dot.notation access to dictionary attributes"""
-    __getattr__ = dict.get
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
 
 
 def filter_state_dict(ori_state_dict, pre_state_dict, excludes=[]):
@@ -205,17 +187,27 @@ def filter_optim_state_dict(ori_optim, pre_optim):
     return output
 
 
-def process_frame_yowo(video_path: str, cfg_path: str, det_label_dir: str, gt_label_dir: str = None):
+def generate_dataset_loader(video_path: str, opt_num_workers: int = 0, gt_label_dir: str = None) -> DataLoader:
+    system_dataset = SystemDataset(
+        video_path, gt_label_dir, shape=(224, 224),
+        frame_transform=transforms.Compose([transforms.ToTensor()]),
+        clip_dur=16
+    )
+
+    return DataLoader(system_dataset, num_workers=opt_num_workers, pin_memory=True)
+
+
+def process_frame_yowo(sys_opt: dict, test_loader: DataLoader, yowo_label_folder: str):
     """
     frames of the clip must be in RGB and the len match the num of train_frame of the model
     """
-    sys_opt: dict = read_data_cfg(cfg_path)
-
     opt_cfg_data = sys_opt["cfg_data"]
     opt_cfg_file = sys_opt["cfg_file"]
     opt_resume_path = sys_opt["resume_path"]
     opt_original = str_2_bool(sys_opt["original"])
     opt_evaluate = str_2_bool(sys_opt["evaluate"])
+    opt_begin_epoch = int(sys_opt["begin_epoch"])
+    opt_end_epoch = int(sys_opt["end_epoch"])
 
     sys_data_opt = read_data_cfg(opt_cfg_data)
     sys_cfg_opt = parse_cfg(opt_cfg_file)
@@ -228,7 +220,6 @@ def process_frame_yowo(video_path: str, cfg_path: str, det_label_dir: str, gt_la
     opt_learning_rate = float(net_opt["learning_rate"])
 
     opt_gpus: str = sys_data_opt["gpus"]  # e.g. 0,1,2,3
-    opt_num_workers = int(sys_data_opt["num_workers"])
 
     use_cuda = torch.cuda.is_available()
     seed = int(time.time())
@@ -237,7 +228,7 @@ def process_frame_yowo(video_path: str, cfg_path: str, det_label_dir: str, gt_la
         os.environ['CUDA_VISIBLE_DEVICES'] = opt_gpus
         torch.cuda.manual_seed(seed)
 
-    model_frame = YOWO(sys_opt)
+    model_frame = YOWO(_Map(sys_opt))
 
     model_frame = model_frame.cuda()
     model = nn.DataParallel(model_frame, device_ids=["cuda:0"])  # TODO: change for multi gpus
@@ -245,7 +236,7 @@ def process_frame_yowo(video_path: str, cfg_path: str, det_label_dir: str, gt_la
     pytorch_total_params = sum(param.numel() for param in model.parameters() if param.requires_grad)
     logging('Total number of trainable parameters: {}'.format(pytorch_total_params))
 
-    parameters = get_fine_tuning_parameters(model, sys_opt)
+    parameters = get_fine_tuning_parameters(model, _Map(sys_opt))
     optimizer = optim.SGD(parameters, lr=opt_learning_rate / opt_batch_size, momentum=opt_momentum, dampening=0,
                           weight_decay=opt_decay * opt_batch_size)
 
@@ -254,7 +245,7 @@ def process_frame_yowo(video_path: str, cfg_path: str, det_label_dir: str, gt_la
         print("===================================================================")
         print('loading checkpoint {}'.format(opt_resume_path))
         checkpoint = torch.load(opt_resume_path)
-        sys_opt.begin_epoch = checkpoint['epoch'] + 1
+        opt_begin_epoch = checkpoint['epoch'] + 1
 
         if opt_original:
             model_dict = model.state_dict()
@@ -275,24 +266,10 @@ def process_frame_yowo(video_path: str, cfg_path: str, det_label_dir: str, gt_la
         print("Loaded model fscore: ", checkpoint['fscore'])
         print("===================================================================")
 
-    system_dataset = SystemDataset(
-        video_path, gt_label_dir, shape=(244, 244),
-        frame_transform=transforms.Compose([transforms.ToTensor()]),
-        clip_dur=16
-    )
-
-    test_loader = DataLoader(system_dataset, num_workers=opt_num_workers, pin_memory=True)
-
     if opt_evaluate:
         logging('evaluating ...')
-        test(sys_cfg_opt, 0, model, test_loader, det_label_dir)
+        test(sys_cfg_opt, 0, model, test_loader, yowo_label_folder)
 
     else:
-        epoch = sys_opt.begin_epoch
-        yolo_label_folder = os.path.join(det_label_dir, "detection_yolo")
-        yowo_label_folder = os.path.join(det_label_dir, "detection_yowo")
-        final_label_folder = os.path.join(det_label_dir, "detection_final")
-
+        epoch = opt_begin_epoch
         test(sys_cfg_opt, epoch, model, test_loader, yowo_label_folder)
-        process_frame_yolo(sys_opt, test_loader, yolo_label_folder)
-        process_label_video(video_path, final_label_folder, yolo_label_folder, yowo_label_folder)

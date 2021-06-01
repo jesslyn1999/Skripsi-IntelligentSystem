@@ -1,8 +1,7 @@
 import torch
 import numpy as np
 import os
-from core.utils import bbox_iou, logging, get_region_boxes, nms, mkdir
-from pathlib import Path
+from core.utils import bbox_iou, logging, get_region_boxes, nms, mkdir, to_cpu
 from typing import List
 from torch.utils.data import DataLoader
 
@@ -59,11 +58,13 @@ def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_lab
     total_detected = 0.0
 
     nbatch = len(test_loader)
+    mkdir(det_label_dir)
 
     logging('validation at epoch %d' % epoch)
     model.eval()
 
-    for batch_idx, (frame_idx, n_frames, data, target) in enumerate(test_loader):
+    for batch_idx, (frame_idx, n_frames, data, target, _) in enumerate(test_loader):
+        n_frames = to_cpu(n_frames).numpy()[0]
         n_digits = len(str(n_frames))
 
         if batch_idx % 10 == 0:
@@ -79,10 +80,8 @@ def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_lab
                 boxes = all_boxes[i]
                 boxes = nms(boxes, nms_thresh)
 
+                frame_idx = to_cpu(frame_idx).numpy()[0]
                 detection_path = os.path.join(det_label_dir, str(frame_idx + 1).zfill(n_digits))
-                detection_dir_path = Path(detection_path).parent
-
-                mkdir(detection_dir_path)
 
                 with open(detection_path, 'w+') as f_detect:
                     for box in boxes:

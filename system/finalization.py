@@ -1,8 +1,7 @@
-from PIL import Image, ImageDraw
-from pathlib import Path
+from PIL import Image
 from typing import List
 import numpy as np
-import bbox as bb_util
+import system.bbox as bb_util
 
 from core.utils import bbox_iou, mkdir
 
@@ -51,6 +50,7 @@ def filter_bbox(yolo_bboxes, yowo_bboxes, out_label_path: str, width: int, heigh
         #     correct = correct + 1
 
     l_bboxes = len(selected_final_bboxes)
+
     with open(out_label_path, 'w+') as writer:
         for idx, bbox in enumerate(selected_final_bboxes):
             if idx == l_bboxes - 1:

@@ -1,4 +1,6 @@
 import random
+
+import numpy as np
 from torch.utils.data.dataset import T_co
 from torchvision.transforms import Compose
 
@@ -106,6 +108,8 @@ class SystemDataset(Dataset):
 
         key_frame_idx, clip, label = load_system_data(self.video_path, index,
                                                       self.clip_dur, self.sampling_rate, label_path)
+        key_frame = np.asarray(clip[0]).copy()
+
         clip = [img.resize(self.shape) for img in clip]
 
         if self.frame_transform is not None:
@@ -116,4 +120,4 @@ class SystemDataset(Dataset):
         if self.label_transform is not None:
             label = self.label_transform(label)
 
-        return index, self._num_samples, clip, label
+        return index, self._num_samples, clip, label, key_frame

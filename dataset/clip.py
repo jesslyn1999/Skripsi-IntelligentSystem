@@ -161,7 +161,7 @@ def load_data_detection(base_path, imgpath, train, train_dur, sampling_rate, sha
 def load_system_data(
         video_path: str, key_frame_idx: int, train_dur: int,
         sampling_rate: int, label_path: str = None
-) -> Tuple[int, list, Union[torch.Tensor, Any]]:
+) -> Tuple[int, list[Image.Image], Union[torch.Tensor, Any]]:
     """
     only for testing or system usage, not for training
     key_frame_idx: range 0...len frames of video(exclusive)
@@ -182,9 +182,12 @@ def load_system_data(
 
         res, frame = cap.read()
         frame = _cv.cvtColor(frame, _cv.COLOR_BGR2RGB)
+        frame = Image.fromarray(frame)
         clip.append(frame)
 
     cap.release()
+
+    key_frame = clip[0].copy()
 
     """
     Process Label
