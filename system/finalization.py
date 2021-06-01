@@ -165,11 +165,15 @@ def video_bbox(video_path: str, out_video_path: str, gt_folder: str = None, det_
         frame = _cv.cvtColor(frame, _cv.COLOR_BGR2RGB)
 
         targeted_filename = "{}.txt".format(str(cur_frame).zfill(n_digits))
-        gt_label_path = str([path for path in _Path(gt_folder).rglob("*{}.txt".format(cur_frame))
-                             if int(str(path)) == cur_frame][0])
+        gt_label_path = None
+        if gt_folder:
+            gt_label_path = str([path for path in _Path(gt_folder).rglob("*{}.txt".format(cur_frame))
+                                 if int(str(path)) == cur_frame][0])
         det_label_path = os.path.join(det_folder, targeted_filename)
 
         img = process_image(frame, gt_label_path, det_label_path, is_usual=True)
+
+        img = np.array(img)[:, :, ::-1]
         cv_writer.write(img)
 
     cap.release()

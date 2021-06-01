@@ -342,7 +342,9 @@ def get_region_boxes(output, conf_thresh, num_classes, anchors, num_anchors, onl
                         if (not only_objectness) and validation:
                             for c in range(num_classes):
                                 tmp_conf = cls_confs[ind][c]
-                                if c != cls_max_id and det_confs[ind] * tmp_conf > conf_thresh:
+                                # TODO: comment if specific
+                                # if c != cls_max_id and det_confs[ind] * tmp_conf > conf_thresh:
+                                if c != cls_max_id:
                                     box.append(tmp_conf)
                                     box.append(c)
                         boxes.append(box)

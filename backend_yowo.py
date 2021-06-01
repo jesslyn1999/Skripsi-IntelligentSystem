@@ -197,7 +197,7 @@ def generate_dataset_loader(video_path: str, opt_num_workers: int = 0, gt_label_
     return DataLoader(system_dataset, num_workers=opt_num_workers, pin_memory=True)
 
 
-def process_frame_yowo(sys_opt: dict, test_loader: DataLoader, yowo_label_folder: str):
+def process_frame_yowo(sys_opt: dict, test_loader: DataLoader, yowo_det_folder: str):
     """
     frames of the clip must be in RGB and the len match the num of train_frame of the model
     """
@@ -268,8 +268,8 @@ def process_frame_yowo(sys_opt: dict, test_loader: DataLoader, yowo_label_folder
 
     if opt_evaluate:
         logging('evaluating ...')
-        test(sys_cfg_opt, 0, model, test_loader, yowo_label_folder)
+        test(sys_cfg_opt, 0, model, test_loader, yowo_det_folder)
 
     else:
         epoch = opt_begin_epoch
-        test(sys_cfg_opt, epoch, model, test_loader, yowo_label_folder)
+        test(sys_cfg_opt, epoch, model, test_loader, yowo_det_folder)

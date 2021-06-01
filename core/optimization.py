@@ -74,14 +74,16 @@ def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_lab
 
         with torch.no_grad():
             output = model(data).data
-            all_boxes = get_region_boxes(output, conf_thresh_valid, opt_num_classes, opt_anchors, opt_num_anchors, 0, 1)
+            all_boxes = get_region_boxes(output, conf_thresh_valid, opt_num_classes,
+                                         opt_anchors, opt_num_anchors, 0, 1)
 
             for i in range(output.size(0)):
                 boxes = all_boxes[i]
                 boxes = nms(boxes, nms_thresh)
 
                 frame_idx = to_cpu(frame_idx).numpy()[0]
-                detection_path = os.path.join(det_label_dir, str(frame_idx + 1).zfill(n_digits))
+                detection_path = os.path.join(det_label_dir, "{}.txt".format(
+                    str(frame_idx + 1).zfill(n_digits)))
 
                 with open(detection_path, 'w+') as f_detect:
                     for box in boxes:
@@ -90,18 +92,13 @@ def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_lab
                         x2 = round(float(box[0] + box[2] / 2.0) * 320.0)
                         y2 = round(float(box[1] + box[3] / 2.0) * 240.0)
 
-                        det_conf = float(box[4])
-                        for j in range((len(box) - 5) // 2):
-                            cls_conf = float(box[5 + 2 * j].item())
-                            prob = det_conf * cls_conf
+                        # det_conf = float(box[4])
+                        # for j in range((len(box) - 5) // 2):
+                        #     cls_conf = float(box[5 + 2 * j].item())
+                        #     prob = det_conf * cls_conf
 
-                            f_detect.write(str(x1) + ' ' + str(y1) + ' ' + str(x2) + ' ' + str(y2) + " " +
-                                           " ".join([str(num).replace("tensor(", "").replace(")", "") for num in box[4:]]) + '\n')
-
-                            # TODO: comment if specific
-                            # f_detect.write(
-                            #     str(int(box[6]) + 1) + ' ' + str(prob) + ' ' + str(x1) + ' ' + str(y1) + ' ' + str(
-                            #         x2) + ' ' + str(y2) + '\n')
+                        line = np.append([x1, y1, x2, y2], box[4:])
+                        f_detect.write(("{:g} " * line.shape[0]).rstrip().format(*line) + '\n')
 
                 truths = target[i].view(-1, 5)
                 num_gts = truths_length(truths)
@@ -115,7 +112,8 @@ def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_lab
                         pred_list.append(bbox)
 
                 for gt_idx in range(num_gts):
-                    box_gt = [truths[gt_idx][1], truths[gt_idx][2], truths[gt_idx][3], truths[i][4], 1.0, 1.0, truths[gt_idx][0]]
+                    box_gt = [truths[gt_idx][1], truths[gt_idx][2], truths[gt_idx][3], truths[i][4],
+                              1.0, 1.0, truths[gt_idx][0]]
                     best_iou = 0
                     best_j = -1
 

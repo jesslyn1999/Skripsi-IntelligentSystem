@@ -20,11 +20,11 @@ def main():
     final_label_folder = os.path.join(det_label_dir, "detection_final")
     final_video_path = os.path.join(det_label_dir, "video.avi")
 
-    test_loader = generate_dataset_loader(video_path, opt_num_workers)
-
-    # process_frame_yowo(sys_opt, test_loader, det_label_dir)
-    process_frame_yolo(sys_opt, test_loader, yolo_label_folder)
-    process_label_video(video_path, final_label_folder, yolo_label_folder, yowo_label_folder)
+    # test_loader = generate_dataset_loader(video_path, opt_num_workers)
+    #
+    # process_frame_yowo(sys_opt, test_loader, yowo_label_folder)
+    # process_frame_yolo(sys_opt, test_loader, yolo_label_folder)
+    # process_label_video(video_path, final_label_folder, yolo_label_folder, yowo_label_folder)
     video_bbox(video_path, final_video_path, det_folder=final_label_folder)
 
 
