@@ -1,6 +1,7 @@
-"""YOLOv3-specific modules
+"""YOLOv5-specific modules
+
 Usage:
-    $ python path/to/models/yolo.py --cfg yolov3.yaml
+    $ python path/to/models/yolo.py --cfg yolov5s.yaml
 """
 
 import argparse
@@ -12,11 +13,11 @@ from pathlib import Path
 sys.path.append(Path(__file__).parent.parent.absolute().__str__())  # to run '$ python *.py' files in subdirectories
 logger = logging.getLogger(__name__)
 
-from backbone.common_yolov3 import *
-from backbone.yolov3 import *
-from core.utils_yolov3 import check_anchor_order
-from core.utils_general_yolov3 import make_divisible, check_file, set_logging
-from core.utils_torch_yolov3 import time_synchronized, fuse_conv_and_bn, model_info, scale_img, initialize_weights, \
+from models.common import *
+from models.experimental import *
+from utils.autoanchor import check_anchor_order
+from utils.general import make_divisible, check_file, set_logging
+from utils.torch_utils import time_synchronized, fuse_conv_and_bn, model_info, scale_img, initialize_weights, \
     select_device, copy_attr
 
 try:

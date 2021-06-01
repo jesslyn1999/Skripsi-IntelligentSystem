@@ -1,4 +1,4 @@
-# YOLOv3 general utils
+# YOLOv5 general utils
 
 import glob
 import logging
@@ -15,15 +15,20 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pandas as pd
 import pkg_resources as pkg
 import torch
 import torchvision
+import yaml
 
-from core.utils_torch_yolov3 import init_torch_seeds
+from utils.google_utils import gsutil_getsize
+from utils.metrics import fitness
+from utils.torch_utils import init_torch_seeds
 
 # Settings
 torch.set_printoptions(linewidth=320, precision=5, profile='long')
 np.set_printoptions(linewidth=320, formatter={'float_kind': '{:11.5g}'.format})  # format short g, %precision=5
+pd.options.display.max_columns = 10
 cv2.setNumThreads(0)  # prevent OpenCV from multithreading (incompatible with PyTorch DataLoader)
 os.environ['NUMEXPR_MAX_THREADS'] = str(min(os.cpu_count(), 8))  # NumExpr max threads
 
@@ -48,17 +53,22 @@ def get_latest_run(search_dir='.'):
 
 
 def is_docker():
-    # Is environment a Docker container
+    # Is environment a Docker container?
     return Path('/workspace').exists()  # or Path('/.dockerenv').exists()
 
 
 def is_colab():
-    # Is environment a Google Colab instance
+    # Is environment a Google Colab instance?
     try:
         import google.colab
         return True
     except Exception as e:
         return False
+
+
+def is_pip():
+    # Is file in a pip package?
+    return 'site-packages' in Path(__file__).absolute().parts
 
 
 def emojis(str=''):
@@ -108,7 +118,7 @@ def check_python(minimum='3.7.0', required=True):
     current = platform.python_version()
     result = pkg.parse_version(current) >= pkg.parse_version(minimum)
     if required:
-        assert result, f'Python {minimum} required by YOLOv3, but Python {current} is currently installed'
+        assert result, f'Python {minimum} required by YOLOv5, but Python {current} is currently installed'
     return result
 
 
@@ -131,7 +141,7 @@ def check_requirements(requirements='requirements.txt', exclude=()):
             pkg.require(r)
         except Exception as e:  # DistributionNotFound or VersionConflict if requirements not met
             n += 1
-            print(f"{prefix} {r} not found and is required by YOLOv3, attempting auto-update...")
+            print(f"{prefix} {r} not found and is required by YOLOv5, attempting auto-update...")
             try:
                 print(subprocess.check_output(f"pip install '{r}'", shell=True).decode())
             except Exception as e:
@@ -489,6 +499,7 @@ def wh_iou(wh1, wh2):
 def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False, multi_label=False,
                         labels=(), max_det=300):
     """Runs Non-Maximum Suppression (NMS) on inference results
+
     Returns:
          list of detections, on (n,6) tensor per image [xyxy, conf, cls]
     """
@@ -595,6 +606,37 @@ def strip_optimizer(f='best.pt', s=''):  # from utils.general import *; strip_op
     print(f"Optimizer stripped from {f},{(' saved as %s,' % s) if s else ''} {mb:.1f}MB")
 
 
+def print_mutation(hyp, results, yaml_file='hyp_evolved.yaml', bucket=''):
+    # Print mutation results to evolve.txt (for use with train.py --evolve)
+    a = '%10s' * len(hyp) % tuple(hyp.keys())  # hyperparam keys
+    b = '%10.3g' * len(hyp) % tuple(hyp.values())  # hyperparam values
+    c = '%10.4g' * len(results) % results  # results (P, R, mAP@0.5, mAP@0.5:0.95, val_losses x 3)
+    print('\n%s\n%s\nEvolved fitness: %s\n' % (a, b, c))
+
+    if bucket:
+        url = 'gs://%s/evolve.txt' % bucket
+        if gsutil_getsize(url) > (os.path.getsize('evolve.txt') if os.path.exists('evolve.txt') else 0):
+            os.system('gsutil cp %s .' % url)  # download evolve.txt if larger than local
+
+    with open('evolve.txt', 'a') as f:  # append result
+        f.write(c + b + '\n')
+    x = np.unique(np.loadtxt('evolve.txt', ndmin=2), axis=0)  # load unique rows
+    x = x[np.argsort(-fitness(x))]  # sort
+    np.savetxt('evolve.txt', x, '%10.3g')  # save sort by fitness
+
+    # Save yaml
+    for i, k in enumerate(hyp.keys()):
+        hyp[k] = float(x[0, i + 7])
+    with open(yaml_file, 'w') as f:
+        results = tuple(x[0, :7])
+        c = '%10.4g' * len(results) % results  # results (P, R, mAP@0.5, mAP@0.5:0.95, val_losses x 3)
+        f.write('# Hyperparameter Evolution Results\n# Generations: %g\n# Metrics: ' % len(x) + c + '\n\n')
+        yaml.safe_dump(hyp, f, sort_keys=False)
+
+    if bucket:
+        os.system('gsutil cp evolve.txt %s gs://%s' % (yaml_file, bucket))  # upload
+
+
 def apply_classifier(x, model, img, im0):
     # Apply a second stage classifier to yolo outputs
     im0 = [im0] if isinstance(im0, np.ndarray) else im0
@@ -660,9 +702,3 @@ def increment_path(path, exist_ok=False, sep='', mkdir=False):
     if not dir.exists() and mkdir:
         dir.mkdir(parents=True, exist_ok=True)  # make directory
     return path
-
-
-def attempt_download(file):
-    # Attempt file download if does not exist
-    file = Path(str(file).strip().replace("'", ''))
-    return str(file)

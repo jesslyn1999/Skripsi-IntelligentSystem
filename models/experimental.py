@@ -1,11 +1,11 @@
-# YOLOv3 experimental modules
+# YOLOv5 experimental modules
 
 import numpy as np
 import torch
 import torch.nn as nn
 
-from backbone.common_yolov3 import Conv, DWConv
-from core.utils_general_yolov3 import attempt_download
+from models.common import Conv, DWConv
+from utils.google_utils import attempt_download
 
 
 class CrossConv(nn.Module):
@@ -111,14 +111,12 @@ class Ensemble(nn.ModuleList):
 
 
 def attempt_load(weights, map_location=None, inplace=True):
-    from backbone.specific_yolov3 import Detect, Model
-    print("HEYY: ", weights, map_location, inplace)
+    from models.yolo import Detect, Model
 
     # Loads an ensemble of models weights=[a,b,c] or a single model weights=[a] or weights=a
     model = Ensemble()
     for w in weights if isinstance(weights, list) else [weights]:
         ckpt = torch.load(attempt_download(w), map_location=map_location)  # load
-        print("HEYY: ", w)
         model.append(ckpt['ema' if ckpt.get('ema') else 'model'].float().fuse().eval())  # FP32 model
 
     # Compatibility updates

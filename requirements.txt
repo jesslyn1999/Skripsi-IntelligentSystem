@@ -1,18 +1,3 @@
-torch
-torchvision
-torchaudio
-numpy
-Pillow
-opencv-python
-tqdm
-scipy
-matplotlib
-scikit-image
-imageio
-imgaug
-thop
-
-
 # base ----------------------------------------
 matplotlib>=3.2.2
 numpy>=1.18.5
