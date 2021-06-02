@@ -15,20 +15,18 @@ ALL_ACTION_LABELS = ["falling_down", "chest_pain", "pushing", "touch_pocket",
                      "attacked_by_gun", "run"]
 
 
-def filter_bbox(yolo_bboxes, yowo_bboxes, out_label_path: str, width: int, height: int):
+def filter_bbox(yolo_bboxes, yowo_bboxes, out_label_path: str):
     num_gts = len(yolo_bboxes)
     selected_final_bboxes = []
 
     for i in range(num_gts):
         # x1, y1, x2, y2, localization conf
-        box_gt = [yolo_bboxes[i][0], yolo_bboxes[i][1], yolo_bboxes[i][2], yolo_bboxes[i][3], yolo_bboxes[i][4]]
+        box_gt = yolo_bboxes[i][:5]
         best_iou = 0
         best_j = -1
 
         for j in range(len(yowo_bboxes)):
             dboxes = yowo_bboxes[j]
-            dboxes[0], dboxes[2] = dboxes[0] / 320 * width, dboxes[2] / 320 * width
-            dboxes[1], dboxes[3] = dboxes[1] / 240 * height, dboxes[3] / 240 * height
             iou = bbox_iou(box_gt, dboxes, x1y1x2y2=True)  # iou > 0,5 = TP, iou < 0.5 = FP
             if iou > best_iou:
                 best_j = j
@@ -63,8 +61,6 @@ def process_label_video(video_path: str, out_label_folder: str, yolo_label_folde
     cap = _cv.VideoCapture(video_path)
     mkdir(out_label_folder)
 
-    width = int(cap.get(_cv.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(_cv.CAP_PROP_FRAME_HEIGHT))
     n_frames = int(cap.get(_cv.CAP_PROP_FRAME_COUNT))
     n_digits = len(str(n_frames))
 
@@ -86,7 +82,7 @@ def process_label_video(video_path: str, out_label_folder: str, yolo_label_folde
         yolo_bboxes = read_file_lines(yolo_label_path)
         yowo_bboxes = read_file_lines(yowo_label_path)
 
-        filter_bbox(yolo_bboxes, yowo_bboxes, final_label_path, width, height)
+        filter_bbox(yolo_bboxes, yowo_bboxes, final_label_path)
 
     cap.release()
 
@@ -180,13 +176,14 @@ def video_bbox(video_path: str, out_video_path: str, gt_folder: str = None, det_
 
 
 def read_file_lines(file_path):
-    if not file_path:
+    if not file_path or not os.path.exists(file_path):
         return []
     f = open(file_path)
     lines = f.read().splitlines()
     lines = [line for line in lines if len(line) != 0]
     unique_lines = list(dict.fromkeys(lines))
     split_lines = [[float(element) for element in line.split(" ")] for line in unique_lines]
+    f.close()
     return split_lines
 
 

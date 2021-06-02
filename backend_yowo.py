@@ -187,14 +187,15 @@ def filter_optim_state_dict(ori_optim, pre_optim):
     return output
 
 
-def generate_dataset_loader(video_path: str, opt_num_workers: int = 0, gt_label_dir: str = None) -> DataLoader:
+def generate_dataset_loader(video_path: str, opt_num_workers: int = 0, opt_batch_size: int = 1,
+                            gt_label_dir: str = None) -> DataLoader:
     system_dataset = SystemDataset(
         video_path, gt_label_dir, shape=(224, 224),
         frame_transform=transforms.Compose([transforms.ToTensor()]),
         clip_dur=16
     )
 
-    return DataLoader(system_dataset, num_workers=opt_num_workers, pin_memory=True)
+    return DataLoader(system_dataset, num_workers=opt_num_workers, batch_size=opt_batch_size, pin_memory=True)
 
 
 def process_frame_yowo(sys_opt: dict, test_loader: DataLoader, yowo_det_folder: str):

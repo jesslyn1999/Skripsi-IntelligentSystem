@@ -8,6 +8,7 @@ from pathlib import Path
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
+from core.utils import logging
 
 from utils.datasets import letterbox
 from models.experimental import attempt_load
@@ -61,20 +62,19 @@ def process_frame_yolo(sys_opt: dict, dataset_loader, det_label_dir: str):
     t0 = time.time()
 
     for batch_idx, (frame_idx, n_frames, _, target, key_frame) in enumerate(dataset_loader):
-        n_frames = to_cpu(n_frames).numpy()[0]
-        n_digits = len(str(n_frames))
+        n_frames = to_cpu(n_frames).numpy()
+        frame_idx = to_cpu(frame_idx).numpy()
 
-        if batch_idx % 10 == 0:
-            print("Test Batch_idx-{}/{}".format(batch_idx, nbatch))
-
-        img0 = to_cpu(key_frame).numpy()[0][:, :, ::-1]  # convert to BGR
+        img0 = to_cpu(key_frame).numpy()[:, :, :, ::-1]  # convert to BGR
         assert img0 is not None, 'Image Not Rendered'
 
-        # Padded resize
-        img = letterbox(img0, imgsz, stride=stride)[0]
+        img = []
+        for idx, im in enumerate(img0):
+            img.append(letterbox(im, imgsz, stride=stride)[0])
+        img = np.asarray(img)
 
         # Convert
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+        img = img[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB, to 3x416x416
         img = np.ascontiguousarray(img)
 
         img = torch.from_numpy(img).to(device)
@@ -93,15 +93,16 @@ def process_frame_yolo(sys_opt: dict, dataset_loader, det_label_dir: str):
         t2 = time_synchronized()
 
         for i, det in enumerate(pred):  # detections per image
-            gn = torch.tensor(img0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+            # gn = torch.tensor(img0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             if len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], img0.shape).round()
 
                 # Write results
-                frame_idx = to_cpu(frame_idx).numpy()[0]
+                n_digits = len(str(n_frames[i]))
+                f_idx = frame_idx[i]
                 detection_path = os.path.join(det_label_dir, "{}.txt".format(
-                    str(frame_idx + 1).zfill(n_digits)))
+                    str(f_idx + 1).zfill(n_digits)))
 
                 for *xyxy, conf, cls in reversed(det):
                     # xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
@@ -110,4 +111,9 @@ def process_frame_yolo(sys_opt: dict, dataset_loader, det_label_dir: str):
                         f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
             # Print time (inference + NMS)
-            print(f'Done. ({t2 - t1:.3f}s)')
+            # print(f'Done. ({t2 - t1:.3f}s)')
+
+        if batch_idx % 20 == 0:
+            logging(f"Progress: [%d/%d]. Done. ({t2 - t1:.3f}s)" % (batch_idx, nbatch))
+
+    print(f'Done. ({time.time() - t0:.3f}s)')

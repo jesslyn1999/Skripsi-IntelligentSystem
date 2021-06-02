@@ -164,5 +164,4 @@ def add(image, left, top, right, bottom, label=None, color=None, place_label: st
                 rec_right_bottom = (rectangle_right, rectangle_bottom)
 
             _cv2.rectangle(image, rec_left_top, rec_right_bottom, color, -1)
-
             image[label_top:label_bottom, label_left:label_right, :] = label_image

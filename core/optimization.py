@@ -63,12 +63,11 @@ def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_lab
     logging('validation at epoch %d' % epoch)
     model.eval()
 
-    for batch_idx, (frame_idx, n_frames, data, target, _) in enumerate(test_loader):
-        n_frames = to_cpu(n_frames).numpy()[0]
-        n_digits = len(str(n_frames))
+    logging("Start Progressing...")
 
-        if batch_idx % 10 == 0:
-            print("Test Batch_idx-{}/{}".format(batch_idx, nbatch))
+    for batch_idx, (frame_idx, n_frames, data, target, key_frame) in enumerate(test_loader):
+        n_frames = to_cpu(n_frames).numpy()
+        frame_idx = to_cpu(frame_idx).numpy()
 
         data = data.cuda()
 
@@ -81,16 +80,20 @@ def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_lab
                 boxes = all_boxes[i]
                 boxes = nms(boxes, nms_thresh)
 
-                frame_idx = to_cpu(frame_idx).numpy()[0]
+                height, width = key_frame[i].size()[:2]
+
+                n_digits = len(str(n_frames[i]))
+
+                f_idx = frame_idx[i]
                 detection_path = os.path.join(det_label_dir, "{}.txt".format(
-                    str(frame_idx + 1).zfill(n_digits)))
+                    str(f_idx + 1).zfill(n_digits)))
 
                 with open(detection_path, 'w+') as f_detect:
                     for box in boxes:
-                        x1 = round(float(box[0] - box[2] / 2.0) * 320.0)
-                        y1 = round(float(box[1] - box[3] / 2.0) * 240.0)
-                        x2 = round(float(box[0] + box[2] / 2.0) * 320.0)
-                        y2 = round(float(box[1] + box[3] / 2.0) * 240.0)
+                        x1 = max(round(float(box[0] - box[2] / 2.0) * width), 0)
+                        y1 = max(round(float(box[1] - box[3] / 2.0) * height), 0)
+                        x2 = min(round(float(box[0] + box[2] / 2.0) * width), width - 1)
+                        y2 = min(round(float(box[1] + box[3] / 2.0) * height), height - 1)
 
                         # det_conf = float(box[4])
                         # for j in range((len(box) - 5) // 2):
@@ -113,7 +116,7 @@ def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_lab
 
                 for gt_idx in range(num_gts):
                     box_gt = [truths[gt_idx][1], truths[gt_idx][2], truths[gt_idx][3], truths[i][4],
-                              1.0, 1.0, truths[gt_idx][0]]
+                              1.0, 1.0, truths[gt_idx][i]]
                     best_iou = 0
                     best_j = -1
 
@@ -134,7 +137,10 @@ def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_lab
             precision = 1.0 * correct / (proposals + eps)
             recall = 1.0 * correct / (total + eps)
             fscore = 2.0 * precision * recall / (precision + recall + eps)
-            logging("[%d/%d] precision: %f, recall: %f, fscore: %f" % (batch_idx, nbatch, precision, recall, fscore))
+
+            if batch_idx % 20 == 0:
+                logging("Progress: [%d/%d]" % (batch_idx, nbatch))
+            # logging("[%d/%d] precision: %f, recall: %f, fscore: %f" % (batch_idx, nbatch, precision, recall, fscore))
 
     classification_accuracy = 1.0 * correct_classification / (total_detected + eps)
     locolization_recall = 1.0 * total_detected / (total + eps)
