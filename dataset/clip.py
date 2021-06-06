@@ -161,33 +161,35 @@ def load_data_detection(base_path, imgpath, train, train_dur, sampling_rate, sha
 def load_system_data(
         video_path: str, key_frame_idx: int, train_dur: int,
         sampling_rate: int, label_path: str = None
-) -> Tuple[int, list[Image.Image], Union[torch.Tensor, Any]]:
+) -> Tuple[list[Image.Image], Union[torch.Tensor, Any], Image.Image]:
     """
     only for testing or system usage, not for training
     key_frame_idx: range 0...len frames of video(exclusive)
     """
-    clip = []
-    len_video = count_frames(video_path)
-
     cap = _cv.VideoCapture(video_path)
+    len_video = count_frames(cap)
+    assert key_frame_idx < len_video, "Load system data, index >= len_video"
 
-    for idx in reversed(range(train_dur)):
-        tmp_idx = key_frame_idx - idx * sampling_rate
-        while tmp_idx < 0:
-            tmp_idx = len_video + tmp_idx
-        while tmp_idx >= len_video:
-            tmp_idx = tmp_idx - len_video
+    clip = []
 
-        cap.set(_cv.CAP_PROP_POS_FRAMES, tmp_idx)
-
-        res, frame = cap.read()
-        frame = _cv.cvtColor(frame, _cv.COLOR_BGR2RGB)
-        frame = Image.fromarray(frame)
-        clip.append(frame)
-
-    cap.release()
-
-    key_frame = clip[0].copy()
+    if key_frame_idx == 0:  # add beginning 16 frames
+        for tmp_idx in range(train_dur):
+            cap.set(_cv.CAP_PROP_POS_FRAMES, key_frame_idx)
+            ret_val, frame = cap.read()
+            if not ret_val:
+                break
+            frame = _cv.cvtColor(frame, _cv.COLOR_BGR2RGB)
+            frame = Image.fromarray(frame)
+            clip.append(frame)
+        key_frame = np.asarray(clip[-1]).copy()
+    else:  # train_dur <= key_frame_idx : only add key frame idx frame to clip
+        cap.set(_cv.CAP_PROP_POS_FRAMES, key_frame_idx)
+        ret_val, frame = cap.read()
+        if ret_val:
+            frame = _cv.cvtColor(frame, _cv.COLOR_BGR2RGB)
+            frame = Image.fromarray(frame)
+            clip.append(frame)
+        key_frame = np.asarray(clip[-1]).copy()
 
     """
     Process Label
@@ -206,7 +208,9 @@ def load_system_data(
     elif tsz > 0:
         label[0:tsz] = tmp
 
-    return key_frame_idx, clip, label
+    cap.release()
+
+    return clip, label, key_frame
 
 
 # this function works for obtaining new labels after data augumentation

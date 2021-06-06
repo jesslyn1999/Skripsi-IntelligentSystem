@@ -4,6 +4,7 @@ import os
 from core.utils import bbox_iou, logging, get_region_boxes, nms, mkdir, to_cpu
 from typing import List
 from torch.utils.data import DataLoader
+from typing import Tuple
 
 
 def adjust_learning_rate(optimizer, epoch):
@@ -150,3 +151,50 @@ def test(sys_cgf_opt: List[dict], epoch, model, test_loader: DataLoader, det_lab
 
     return fscore
 
+
+@torch.no_grad()
+def test_yowo(sys_cfg_opt: List[dict], model, tuple_itr, det_label_dir: str):
+    def truths_length(truths):
+        for idx in range(50):
+            if truths[idx][1] == 0:
+                return idx
+
+    nms_thresh = 0.4
+    conf_thresh_valid = 0.005
+
+    net_opt, region_opt = sys_cfg_opt
+
+    opt_num_classes = int(region_opt["num_classes"])
+    opt_anchors = [float(itr.strip()) for itr in region_opt["anchors"].split(",")]
+    opt_num_anchors = int(region_opt["num_anchors"])
+
+    n_frame, frame_idx, clip, target, key_frames = tuple_itr
+
+    data = clip.cuda()
+
+    with torch.no_grad():
+        output = model(data).data
+        all_boxes = get_region_boxes(output, conf_thresh_valid, opt_num_classes,
+                                     opt_anchors, opt_num_anchors, 0, 1)
+
+        for i in range(output.size(0)):
+            boxes = all_boxes[i]
+            boxes = nms(boxes, nms_thresh)
+
+            height, width = key_frames[i].shape[:2]
+
+            n_digits = len(str(n_frame[i].item()))
+            f_idx = frame_idx[i].item()
+
+            detection_path = os.path.join(det_label_dir, "{}.txt".format(
+                str(f_idx + 1).zfill(n_digits)))
+
+            with open(detection_path, 'w+') as f_detect:
+                for box in boxes:
+                    x1 = max(round(float(box[0] - box[2] / 2.0) * width), 0)
+                    y1 = max(round(float(box[1] - box[3] / 2.0) * height), 0)
+                    x2 = min(round(float(box[0] + box[2] / 2.0) * width), width - 1)
+                    y2 = min(round(float(box[1] + box[3] / 2.0) * height), height - 1)
+
+                    line = np.append([x1, y1, x2, y2], box[4:])
+                    f_detect.write(("{:g} " * line.shape[0]).rstrip().format(*line) + '\n')

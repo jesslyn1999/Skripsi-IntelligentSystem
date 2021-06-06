@@ -812,11 +812,19 @@ def mkdir(output_folder: str):
     Path(output_folder).mkdir(parents=True, exist_ok=True)
 
 
-def count_frames(video_path: str):
+def count_frames_path(video_path: str) -> int:
     try:
         cap = _cv.VideoCapture(video_path)
         n_frames = int(cap.get(_cv.CAP_PROP_FRAME_COUNT))
         cap.release()
+    except _cv.error as error:
+        raise Exception('count_frames error: {}'.format(error))
+    return n_frames
+
+
+def count_frames(cap: _cv.VideoCapture) -> int:
+    try:
+        n_frames = int(cap.get(_cv.CAP_PROP_FRAME_COUNT))
     except _cv.error as error:
         raise Exception('count_frames error: {}'.format(error))
     return n_frames

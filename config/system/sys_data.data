@@ -1,4 +1,3 @@
 backup = backup
 gpus  = 0
-num_workers = 4
-batch_size = 6
+num_workers = 2

@@ -1,6 +1,5 @@
 import random
 
-import numpy as np
 from torch.utils.data.dataset import T_co
 from torchvision.transforms import Compose
 
@@ -8,9 +7,12 @@ from dataset.clip import load_data_detection, load_system_data
 import torch
 from torch.utils.data import Dataset
 
-from core.utils import count_frames
+from core.utils import count_frames_path
 
 from pathlib import Path as _Path
+from utils.torch_utils import time_synchronized
+
+import time
 
 
 class ListDataset(Dataset):
@@ -88,7 +90,7 @@ class SystemDataset(Dataset):
         self.label_transform = label_transform
         self.clip_dur = clip_dur
         self.sampling_rate = sampling_rate
-        self._num_samples = count_frames(video_path)
+        self._num_samples = count_frames_path(video_path)
         super().__init__()
 
     def __len__(self):
@@ -106,18 +108,35 @@ class SystemDataset(Dataset):
             label_path = str([path for path in _Path(self.label_folder).rglob("*{}.txt".format(index + 1))
                               if int(str(path)) == index + 1][0])
 
-        key_frame_idx, clip, label = load_system_data(self.video_path, index,
-                                                      self.clip_dur, self.sampling_rate, label_path)
-        key_frame = np.asarray(clip[0]).copy()
+        # t0 = time.time()
+
+        clip, label, key_frame = load_system_data(self.video_path, index, self.clip_dur, self.sampling_rate, label_path)
+        t1 = time_synchronized()
 
         clip = [img.resize(self.shape) for img in clip]
+
+        # t2 = time_synchronized()
 
         if self.frame_transform is not None:
             clip = [self.frame_transform(img) for img in clip]
 
-        clip = torch.cat(clip, 0).view((self.clip_dur, -1) + self.shape).permute(1, 0, 2, 3)
+        if clip:
+            clip = torch.cat(clip, 0).view((-1, 3) + self.shape).permute(1, 0, 2, 3)
+            len_clip = clip.size(1)
+            if len_clip != self.clip_dur:
+                ret_clip = torch.empty(3, self.clip_dur, *self.shape)
+                ret_clip[:, :len_clip, :, :] = clip
+                clip = ret_clip
+        else:
+            clip = torch.empty(3, self.clip_dur, *self.shape)
+            len_clip = 0
+
+        # t3 = time_synchronized()
 
         if self.label_transform is not None:
             label = self.label_transform(label)
 
-        return index, self._num_samples, clip, label, key_frame
+        # print(f'{index}.all_time: ({t3 - t0:.3f}s), break down: 1.({t1 - t0:.3f}s). 2.({t2 - t1:.3f}s). '
+        #       f'3.({t3 - t2:.3f}s).')
+
+        return index, self._num_samples, clip, label, len_clip, key_frame

@@ -14,9 +14,8 @@ from dataset.list_dataset import ListDataset, SystemDataset
 from torchvision import transforms
 from core.utils import logging, file_lines
 from torch.utils.data import DataLoader
-from core.optimization import test
-from backend_yolo import process_frame_yolo
-from system.finalization import process_label_video, video_bbox
+from core.optimization import test_yowo
+from core.utils import mkdir
 from core.utils import Map as _Map
 
 _LOC = _path.realpath(_path.join(os.getcwd(), _path.dirname(__file__)))
@@ -143,10 +142,10 @@ def backend_yowo():
 
     if opt.evaluate:
         logging('evaluating ...')
-        test(0, model, test_loader, region_loss)
+        test_yowo(0, model, test_loader, region_loss)
     else:
         for epoch in range(opt.begin_epoch, opt.begin_epoch + 1):
-            fscore = test(epoch, model, test_loader, region_loss)
+            fscore = test_yowo(epoch, model, test_loader, region_loss)
 
 
 def filter_state_dict(ori_state_dict, pre_state_dict, excludes=[]):
@@ -198,7 +197,8 @@ def generate_dataset_loader(video_path: str, opt_num_workers: int = 0, opt_batch
     return DataLoader(system_dataset, num_workers=opt_num_workers, batch_size=opt_batch_size, pin_memory=True)
 
 
-def process_frame_yowo(sys_opt: dict, test_loader: DataLoader, yowo_det_folder: str):
+@torch.no_grad()
+def process_frame_yowo(sys_opt: dict, yowo_label_dir: str):
     """
     frames of the clip must be in RGB and the len match the num of train_frame of the model
     """
@@ -267,10 +267,11 @@ def process_frame_yowo(sys_opt: dict, test_loader: DataLoader, yowo_det_folder: 
         print("Loaded model fscore: ", checkpoint['fscore'])
         print("===================================================================")
 
-    if opt_evaluate:
-        logging('evaluating ...')
-        test(sys_cfg_opt, 0, model, test_loader, yowo_det_folder)
+    epoch = opt_begin_epoch
 
-    else:
-        epoch = opt_begin_epoch
-        test(sys_cfg_opt, epoch, model, test_loader, yowo_det_folder)
+    mkdir(yowo_label_dir)
+
+    logging('validation at epoch %d' % epoch)
+    model.eval()
+
+    return epoch, model
