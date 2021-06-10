@@ -9,7 +9,7 @@ from backend_yowo import process_frame_yowo, generate_dataset_loader
 import time
 import torch
 from utils.torch_utils import time_synchronized
-from multiprocessing import Process
+import threading
 
 
 def worker(num):
@@ -19,11 +19,11 @@ def worker(num):
 
 
 def main():
-    # video_path = "D:\\semester 8\\TA\\IntelligentSystem-Result\\S002C002P003R001A045_rgb.avi"
+    video_path = "D:\\semester 8\\TA\\IntelligentSystem-Result\\shootgun-video.mp4"
+    det_label_dir = "D:\\semester 8\\TA\\IntelligentSystem-Result\\thrash-shootgun-video\\det-label"
     sys_cfg_path = "D:\\semester 8\\TA\\IntelligentSystem\\config\\system\\sys_config.cfg"
-    video_path = "D:\\semester 8\\TA\\IntelligentSystem-Result\\S002C002P003R001A045_rgb.avi"
-    det_label_dir = "D:\\semester 8\\TA\\IntelligentSystem-Result\\trash-S002C002P003R001A045_rgb\\det-label"
-    # det_label_dir = "D:\\semester 8\\TA\\IntelligentSystem-Result\\S002C002P003R001A045_rgb-2\\det-label"
+    # video_path = "D:\\semester 8\\TA\\IntelligentSystem-Result\\S002C002P003R001A045_rgb.avi"
+    # det_label_dir = "D:\\semester 8\\TA\\IntelligentSystem-Result\\trash-S002C002P003R001A045_rgb\\det-label"
 
     sys_opt: dict = read_data_cfg(sys_cfg_path)
     opt_cfg_data = sys_opt["cfg_data"]
@@ -77,13 +77,26 @@ def main():
             process_clip[batch_idx] = torch.cat((cur_clip[:, clip_idx + 1:, :, :],
                                                  cur_clip[:, 0:clip_idx + 1, :, :]), dim=1)
 
-        test_yowo(sys_cfg_opt, model_yowo, (n_frames, frame_ids, process_clip, targets, key_frames), yowo_label_folder)
-        t2_1 = time_synchronized()
-        test_yolo(model_yolo, (n_frames, frame_ids, key_frames, targets), yolo_label_folder, device, stride)
+        # test_yowo(sys_cfg_opt, model_yowo, (n_frames, frame_ids, process_clip, targets, key_frames), yowo_label_folder)
+        # t2_1 = time_synchronized()
+        # test_yolo(model_yolo, (n_frames, frame_ids, key_frames, targets), yolo_label_folder, device, stride)
+
+        yowo_thread = threading.Thread(target=test_yowo, args=(
+            sys_cfg_opt, model_yowo, (n_frames, frame_ids, process_clip, targets, key_frames), yowo_label_folder))
+        yolo_thread = threading.Thread(target=test_yolo, args=(
+            model_yolo, (n_frames, frame_ids, key_frames, targets), yolo_label_folder, device, stride))
+        threads = [yowo_thread, yolo_thread]
+
+        for itr in threads:
+            itr.start()
+        for itr in threads:
+            itr.join()
 
         t3 = time_synchronized()
+        # print(f'{epoch_idx}.frames_idx: {frame_ids}. load_data: ({t2 - t_prev:.3f}s). '
+        #       f'({t3 - t2:.3f}s): yowo.({t2_1 - t2:.3f}s). yolo.({t3 - t2_1:.3f}s).')
         print(f'{epoch_idx}.frames_idx: {frame_ids}. load_data: ({t2 - t_prev:.3f}s). '
-              f'({t3 - t2:.3f}s): yowo.({t2_1 - t2:.3f}s). yolo.({t3 - t2_1:.3f}s).')
+              f'({t3 - t2:.3f}s): yowo & yolo thread')
         t_prev = t2
 
     t4 = time_synchronized()

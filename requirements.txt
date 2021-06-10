@@ -25,3 +25,7 @@ pandas
 # extras --------------------------------------
 # Cython  # for pycocotools https://github.com/cocodataset/cocoapi/issues/172
 thop  # FLOPS computation
+
+
+PySimpleGUI
+imutils
