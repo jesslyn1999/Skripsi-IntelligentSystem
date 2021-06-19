@@ -89,7 +89,7 @@ def process_label_video(video_path: str, out_label_folder: str, yolo_label_folde
 
 def process_image(
         img: Image.Image, gt_label_path: str = None, det_label_path: str = None,
-        is_usual: bool = True, is_demo: bool = False) -> Image.Image:
+        is_usual: bool = True, is_demo: bool = False, num_labels=3) -> Image.Image:
     gt_bboxes = []
     if gt_label_path:
         gt_bboxes = read_file_lines(gt_label_path)
@@ -99,7 +99,7 @@ def process_image(
         det_bboxes = read_file_lines(det_label_path)
 
     if is_usual:
-        img = image_bbox(img, gt_bboxes, det_bboxes, 3)
+        img = image_bbox(img, gt_bboxes, det_bboxes, num_labels)
 
     if is_demo:
         img = image_bbox(img, gt_bboxes, det_bboxes, 10)
@@ -116,8 +116,8 @@ def image_bbox(img: Image.Image, gt_bboxes: List[List[float]], det_bboxes: List[
 
     for idx, gt_box in enumerate(gt_bboxes):
         x1, y1, x2, y2 = gt_box[1:5]
-        label = ALL_ACTION_LABELS[int(gt_box[0])]
-        bb_util.add(np_img, x1, y1, x2, y2, label, "purple", place_label="bottom")
+        label = ALL_ACTION_LABELS[int(gt_box[0] - 1)]
+        bb_util.add(np_img, x1, y1, x2, y2, label, "lime", place_label="bottom")
 
     for idx, d_box in enumerate(det_bboxes):
         det_labels = np.zeros(len(ALL_ACTION_LABELS))
@@ -163,8 +163,10 @@ def video_bbox(video_path: str, out_video_path: str, gt_folder: str = None, det_
         targeted_filename = "{}.txt".format(str(cur_frame).zfill(n_digits))
         gt_label_path = None
         if gt_folder:
+            # print("HEYYY: ", str([path for path in _Path(gt_folder).rglob("*{}.txt".format(cur_frame))][0]))
+
             gt_label_path = str([path for path in _Path(gt_folder).rglob("*{}.txt".format(cur_frame))
-                                 if int(str(path)) == cur_frame][0])
+                                 if int(str(path.stem)) == cur_frame][0])
         det_label_path = os.path.join(det_folder, targeted_filename)
 
         img = process_image(frame, gt_label_path, det_label_path, is_usual=True)
@@ -179,10 +181,12 @@ def read_file_lines(file_path):
     if not file_path or not os.path.exists(file_path):
         return []
     f = open(file_path)
-    lines = f.read().splitlines()
+    lines = [line for line in f.read().splitlines() if line]
     lines = [line for line in lines if len(line) != 0]
     unique_lines = list(dict.fromkeys(lines))
-    split_lines = [[float(element) for element in line.split(" ")] for line in unique_lines]
+    split_lines = []
+    for line in unique_lines:
+        split_lines.append([float(element) for element in line.split(" ") if element])
     f.close()
     return split_lines
 

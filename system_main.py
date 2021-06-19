@@ -12,15 +12,9 @@ from utils.torch_utils import time_synchronized
 import threading
 
 
-def worker(num):
-    """thread worker function"""
-    print('Worker:', num)
-    return
-
-
-def main():
-    video_path = "D:\\semester 8\\TA\\IntelligentSystem-Result\\shootgun-video.mp4"
-    det_label_dir = "D:\\semester 8\\TA\\IntelligentSystem-Result\\thrash-shootgun-video\\det-label"
+def system_main():
+    video_path = "D:\\semester 8\\TA\\IntelligentSystem-Result\\S001C001P006R002A045_rgb.avi"
+    det_label_dir = "D:\\semester 8\\TA\\IntelligentSystem-Result\\S001C001P006R002A045_rgb\\det-label"
     sys_cfg_path = "D:\\semester 8\\TA\\IntelligentSystem\\config\\system\\sys_config.cfg"
     # video_path = "D:\\semester 8\\TA\\IntelligentSystem-Result\\S002C002P003R001A045_rgb.avi"
     # det_label_dir = "D:\\semester 8\\TA\\IntelligentSystem-Result\\trash-S002C002P003R001A045_rgb\\det-label"
@@ -108,5 +102,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    system_main()
     pass
